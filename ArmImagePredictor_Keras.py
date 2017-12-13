@@ -17,9 +17,27 @@ sys.path.append(".")
 import RTC
 import OpenRTM_aist
 
+import ManipulatorCommonInterface_DataTypes_idl
 import ManipulatorCommonInterface_Common_idl
 import ManipulatorCommonInterface_MiddleLevel_idl
 import Img
+
+
+import numpy as np
+import cv2
+
+
+import os, math
+import keras
+from keras.utils import np_utils
+from keras.layers.convolutional import Conv2D, MaxPooling2D
+from keras.models import Sequential, model_from_json
+from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.preprocessing.image import array_to_img, img_to_array, list_pictures, load_img
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+# import matplotlib.pyplot as plt
 
 # Import Service implementation class
 # <rtc-template block="service_impl">
@@ -70,8 +88,8 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 	def __init__(self, manager):
 		OpenRTM_aist.DataFlowComponentBase.__init__(self, manager)
 
-		camera_arg = [None] * ((len(Img._d_CameraImage) - 4) / 2)
-		self._d_camera = Img.CameraImage(*camera_arg)
+		camera_arg = [None] * ((len(Img._d_TimedCameraImage) - 4) / 2)
+		self._d_camera = Img.TimedCameraImage(*camera_arg)
 		"""
 		"""
 		self._cameraIn = OpenRTM_aist.InPort("camera", self._d_camera)
@@ -100,6 +118,8 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 		 - DefaultValue: 1
 		"""
 		self._debug = [1]
+
+		self._model = None
 		
 		# </rtc-template>
 
@@ -185,7 +205,25 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 		#
 		#
 	def onActivated(self, ec_id):
-	
+		#c = pd.read_csv(os.path.join(dir, 'joints.csv'))
+		#Y = [y for y in zip((c['x']-0.12)/0.12, (c['y']+0.12)/0.24, (c['theta']+math.pi)/(2*math.pi))]
+		#X = [img_to_array(load_img(os.path.join(dir, png.strip()), target_size=(64,64)))/256 for png in c['ImageFilename']]
+		print ('onActivated')
+		self._model = model_from_json(open('model_log.json', 'r').read())
+		self._model.compile(loss='mean_squared_error',
+				    optimizer='SGD',
+				    metrics=['accuracy'])
+
+		self._model.load_weights('param.hdf5')
+		print ('OK')
+
+
+		self._manipCommon._ptr().servoON()
+		self._manipMiddle._ptr().setSpeedJoint(30)
+
+		self._manipMiddle._ptr().movePTPJointAbs([math.pi/2,0, math.pi/2, 0, math.pi/2, 0])
+		self._manipMiddle._ptr().moveGripper(50)
+
 		return RTC.RTC_OK
 	
 		##
@@ -213,7 +251,62 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 		#
 		#
 	def onExecute(self, ec_id):
-	
+
+		if self._cameraIn.isNew():
+			raw_input('Hello?:')
+			data = self._cameraIn.read()
+			w = data.data.image.width
+			h = data.data.image.height
+			print w, h
+			img = np.ndarray(shape=(h, w, 3), dtype=float)
+			size = len(data.data.image.raw_data)
+			for i in range(w*h):
+				img[i/w, i%w, 0] = ord(data.data.image.raw_data[i*3+0])
+				img[i/w, i%w, 1] = ord(data.data.image.raw_data[i*3+1])
+				img[i/w, i%w, 2] = ord(data.data.image.raw_data[i*3+2])
+				pass
+			# cv2.imwrite('hoge2.png', img)
+			#img23 = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
+			#cv2.imwrite('hoge23.png', img23)
+			img3 = cv2.resize(img, (64, 64))
+			# X = [img_to_array(load_img(os.path.join(dir, png.strip()), target_size=(64,64)))/256 for png in c['ImageFilename']]
+			result = self._model.predict(np.asarray([img3/256]))
+			x = result[0][0]*0.12 + 0.12
+			y = result[0][1]*0.24 - 0.12
+			th = result[0][2]*2*math.pi-math.pi
+			print 'result',
+			print x, y, th
+
+			z = 40 / 1000.0
+			z_min = 10 / 1000.0
+
+			#JARA_ARM.CarPosWithElbow carPos
+			s2 = math.sin(th)
+			c2 = math.cos(th)
+			carPos = JARA_ARM.CarPosWithElbow([[0,0,0,0],[0,0,0,0],[0,0,0,0]], 1.0, 1)
+			carPos.carPos[0][0] = -c2;  carPos.carPos[0][1] = s2; carPos.carPos[0][2] =  0.0; carPos.carPos[0][3] = x;
+			carPos.carPos[1][0] =  s2;  carPos.carPos[1][1] = c2; carPos.carPos[1][2] =  0.0; carPos.carPos[1][3] = y;
+			carPos.carPos[2][0] =  0.0; carPos.carPos[2][1] = 0; carPos.carPos[2][2] = -1.0; carPos.carPos[2][3] = z;
+			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
+			
+			time.sleep(1.0)
+
+			carPos.carPos[2][3] = z_min
+			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
+			time.sleep(1.0)
+
+			self._manipMiddle._ptr().moveGripper(10)
+			time.sleep(1.0)
+
+			carPos.carPos[2][3] = z
+			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
+			time.sleep(1.0)
+			
+			self._manipMiddle._ptr().movePTPJointAbs([math.pi/2,0, math.pi/2, 0, math.pi/2, 0])			
+			time.sleep(3.0)
+			self._manipMiddle._ptr().moveGripper(50)
+
+
 		return RTC.RTC_OK
 	
 	#	##
