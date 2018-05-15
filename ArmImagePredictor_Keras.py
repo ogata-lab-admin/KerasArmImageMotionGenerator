@@ -66,11 +66,16 @@ armimagepredictor_keras_spec = ["implementation_id", "ArmImagePredictor_Keras",
 		 "language",          "Python", 
 		 "lang_type",         "SCRIPT",
 		 "conf.default.debug", "1",
+         "conf.default.Gripper_size", "0.1",
 
 		 "conf.__widget__.debug", "text",
 
          "conf.__type__.debug", "int",
 
+         "conf.__widget__.debug", "text",
+
+         "conf.__type__.debug", "int",
+                  
 		 ""]
 # </rtc-template>
 
@@ -120,7 +125,16 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 		self._debug = [1]
 
 		self._model = None
+        
+		"""
 		
+		 - Name:  Gripper_size
+		 - DefaultValue: 0.1
+		"""
+		self._Gripper_size = [0.1]
+
+		self._model = None
+				
 		# </rtc-template>
 
 
@@ -136,7 +150,8 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 	def onInitialize(self):
 		# Bind variables and configuration variable
 		self.bindParameter("debug", self._debug, "1")
-		
+		self.bindParameter("Gripper_size", self._Gripper_size, "0.1")
+        
 		# Set InPort buffers
 		self.addInPort("camera",self._cameraIn)
 		
@@ -295,8 +310,15 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
 			time.sleep(1.0)
 
-			self._manipMiddle._ptr().moveGripper(10)
-			time.sleep(1.0)
+			if self.Gripper_size > 1.0:
+            			gripper_size = 1.0
+			elif self.Gripper_size < 0.0:
+            			gripper_size = 0.0
+           		else:
+            			gripper_size = self.Gripper_size
+                
+            			self._manipMiddle._ptr().moveGripper(gripper_size*100)
+                		time.sleep(1.0)
 
 			carPos.carPos[2][3] = z
 			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
