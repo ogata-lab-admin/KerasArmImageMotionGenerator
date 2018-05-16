@@ -310,6 +310,7 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
 			time.sleep(1.0)
 
+
 			if self._gripper_close_ratio > 1.0:
             			m_gripper_close_ratio = 1.0
 			elif self._gripper_close_ratio < 0.0:
