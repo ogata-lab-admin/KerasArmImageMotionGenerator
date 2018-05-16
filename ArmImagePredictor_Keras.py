@@ -66,11 +66,16 @@ armimagepredictor_keras_spec = ["implementation_id", "ArmImagePredictor_Keras",
 		 "language",          "Python", 
 		 "lang_type",         "SCRIPT",
 		 "conf.default.debug", "1",
+         "conf.default.gripper_close_ratio", "0.1",
 
 		 "conf.__widget__.debug", "text",
 
          "conf.__type__.debug", "int",
 
+         "conf.__widget__.debug", "text",
+
+         "conf.__type__.debug", "int",
+                  
 		 ""]
 # </rtc-template>
 
@@ -120,7 +125,16 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 		self._debug = [1]
 
 		self._model = None
+        
+		"""
 		
+		 - Name:  gripper_close_ratio
+		 - DefaultValue: 0.1
+		"""
+		self._gripper_close_ratio = [0.1]
+
+		self._model = None
+				
 		# </rtc-template>
 
 
@@ -136,7 +150,8 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 	def onInitialize(self):
 		# Bind variables and configuration variable
 		self.bindParameter("debug", self._debug, "1")
-		
+		self.bindParameter("gripper_close_ratio", self._gripper_close_ratio, "0.1")
+        
 		# Set InPort buffers
 		self.addInPort("camera",self._cameraIn)
 		
@@ -295,8 +310,15 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
 			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
 			time.sleep(1.0)
 
-			self._manipMiddle._ptr().moveGripper(10)
-			time.sleep(1.0)
+			if self._gripper_close_ratio > 1.0:
+            			m_gripper_close_ratio = 1.0
+			elif self._gripper_close_ratio < 0.0:
+            			m_gripper_close_ratio = 0.0
+           		else:
+            			m_gripper_close_ratio = self._gripper_close_ratio
+                
+            			self._manipMiddle._ptr().moveGripper(m_gripper_close_ratio*100)
+                		time.sleep(1.0)
 
 			carPos.carPos[2][3] = z
 			self._manipMiddle._ptr().movePTPCartesianAbs(carPos)
