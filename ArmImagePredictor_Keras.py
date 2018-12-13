@@ -491,7 +491,6 @@ class ArmImagePredictor_Keras(OpenRTM_aist.DataFlowComponentBase):
     #
     #   return RTC.RTC_OK
     
-=======
 	
 	##
 	# @brief constructor
